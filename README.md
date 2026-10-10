@@ -29,6 +29,24 @@ ALLOWED_ORIGINS=https://example.github.io npm start
 
 协议支持 `hello`、`create_room`、`join_room`、`rejoin`、`ready`、`move`、`use_skill`、`rematch`、`resync` 和 `leave_room`。首次连接须先发 `hello`，所有消息带 `protocolVersion: 1`。双方准备后倒计时 3 秒，服务器计算各自棋盘和胜负，广播 `match_start`、`move_ack`、`opponent_update`、`skill_result`、`clock` 和 `match_end`；重连返回本人及对手的完整快照。详细字段与阶段边界见 [技术方案](docs/remote-duel-plan-zh.md)。
 
+## 部署
+
+一个 Node 进程同时托管页面、`/ws` 和 `/health`。房间和对局状态保存在进程内存里（没有数据库），因此**只能单实例运行**，重启会清空所有房间。Docker：
+
+```bash
+docker build -t remote2048 .
+docker run -d -p 3000:3000 --restart unless-stopped remote2048
+```
+
+或者直接跑 Node（运行期不需要 `sass`）：
+
+```bash
+npm ci --omit=dev
+PORT=3000 npm start
+```
+
+反向代理、HTTPS/wss、systemd 示例和上线检查清单见 [部署说明](docs/deploy-zh.md)。
+
 ## 干扰玩法
 
 对局中每次产生合并就累积连击，连续 3 次合并获得 1 点能量（上限 2 点）。消耗 1 点能量可以向对手棋盘放一个数值为 `4` 的干扰块，冷却 3 秒。干扰块带珊瑚色描边，参与合并后消失，所以对手棋盘上最多同时存在一个。

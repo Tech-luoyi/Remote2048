@@ -1,0 +1,8 @@
+# 镜像里不该出现的东西：本机 node_modules 会在 COPY 时覆盖容器内的依赖，
+# 且 macOS 上的原生二进制在 linux 镜像里根本不能用。
+node_modules
+npm-debug.log*
+.sass-cache
+.git
+.gitignore
+.DS_Store
