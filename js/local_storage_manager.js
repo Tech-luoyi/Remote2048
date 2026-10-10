@@ -51,7 +51,15 @@ LocalStorageManager.prototype.setBestScore = function (score) {
 // Game state getters/setters and clearing
 LocalStorageManager.prototype.getGameState = function () {
   var stateJSON = this.storage.getItem(this.gameStateKey);
-  return stateJSON ? JSON.parse(stateJSON) : null;
+  if (!stateJSON) return null;
+
+  try {
+    return JSON.parse(stateJSON);
+  } catch (error) {
+    // A truncated or hand-edited save must not prevent the game from booting.
+    this.clearGameState();
+    return null;
+  }
 };
 
 LocalStorageManager.prototype.setGameState = function (gameState) {

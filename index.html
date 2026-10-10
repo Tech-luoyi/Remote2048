@@ -1,8 +1,10 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <title>2048</title>
+  <meta name="description" content="2048 数字合成游戏">
+  <meta name="theme-color" content="#faf8ef">
+  <title>2048 数字合成</title>
 
   <link href="style/main.css" rel="stylesheet" type="text/css">
   <link rel="shortcut icon" href="favicon.ico">
@@ -10,80 +12,153 @@
   <link rel="apple-touch-startup-image" href="meta/apple-touch-startup-image-640x1096.png" media="(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2)"> <!-- iPhone 5+ -->
   <link rel="apple-touch-startup-image" href="meta/apple-touch-startup-image-640x920.png"  media="(device-width: 320px) and (device-height: 480px) and (-webkit-device-pixel-ratio: 2)"> <!-- iPhone, retina -->
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
 
   <meta name="HandheldFriendly" content="True">
   <meta name="MobileOptimized" content="320">
-  <meta name="viewport" content="width=device-width, target-densitydpi=160dpi, initial-scale=1.0, maximum-scale=1, user-scalable=no, minimal-ui">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 <body>
-  <div class="container">
-    <div class="heading">
-      <h1 class="title">2048</h1>
-      <div class="scores-container">
-        <div class="score-container">0</div>
-        <div class="best-container">0</div>
+  <main class="app">
+    <header class="masthead">
+      <div class="brand">
+        <h1 class="wordmark">2048</h1>
+        <span class="brand-name">数字合成</span>
       </div>
+      <div class="scores">
+        <div class="score">
+          <span class="score-label">分数</span>
+          <span class="score-value score-container" aria-live="polite" aria-atomic="true">0</span>
+          <div class="score-gain-container" aria-hidden="true"></div>
+        </div>
+        <div class="score">
+          <span class="score-label" id="best-label">最高分</span>
+          <span class="score-value best-container">0</span>
+        </div>
+      </div>
+    </header>
+
+    <div class="toolbar">
+      <div class="milestone"><span>最大方块</span><strong class="max-tile">2</strong></div>
+      <button class="button button-primary restart-button" type="button"><img class="icon" src="style/icons/rotate-ccw.svg" alt="">重新开始</button>
     </div>
 
-    <div class="above-game">
-      <p class="game-intro">Join the numbers and get to the <strong>2048 tile!</strong></p>
-      <a class="restart-button">New Game</a>
-    </div>
-
-    <div class="game-container">
-      <div class="game-message">
-        <p></p>
+    <div class="game-container" role="region" aria-label="2048 棋盘">
+      <div class="game-message" role="status" aria-live="polite" aria-hidden="true">
+        <img class="result-icon" src="style/icons/trophy.svg" alt="">
+        <p class="message-text"></p>
+        <span class="result-score"></span>
         <div class="lower">
-	        <a class="keep-playing-button">Keep going</a>
-          <a class="retry-button">Try again</a>
+          <button class="button button-primary retry-button" type="button"><img class="icon" src="style/icons/rotate-ccw.svg" alt="">再试一次</button>
+          <button class="button button-secondary keep-playing-button" type="button">继续挑战<img class="icon" src="style/icons/arrow-right.svg" alt=""></button>
         </div>
       </div>
 
-      <div class="grid-container">
-        <div class="grid-row">
-          <div class="grid-cell"></div>
-          <div class="grid-cell"></div>
-          <div class="grid-cell"></div>
-          <div class="grid-cell"></div>
-        </div>
-        <div class="grid-row">
-          <div class="grid-cell"></div>
-          <div class="grid-cell"></div>
-          <div class="grid-cell"></div>
-          <div class="grid-cell"></div>
-        </div>
-        <div class="grid-row">
-          <div class="grid-cell"></div>
-          <div class="grid-cell"></div>
-          <div class="grid-cell"></div>
-          <div class="grid-cell"></div>
-        </div>
-        <div class="grid-row">
-          <div class="grid-cell"></div>
-          <div class="grid-cell"></div>
-          <div class="grid-cell"></div>
-          <div class="grid-cell"></div>
-        </div>
+      <div class="grid-container" aria-hidden="true">
+        <div class="grid-cell"></div>
+        <div class="grid-cell"></div>
+        <div class="grid-cell"></div>
+        <div class="grid-cell"></div>
+        <div class="grid-cell"></div>
+        <div class="grid-cell"></div>
+        <div class="grid-cell"></div>
+        <div class="grid-cell"></div>
+        <div class="grid-cell"></div>
+        <div class="grid-cell"></div>
+        <div class="grid-cell"></div>
+        <div class="grid-cell"></div>
+        <div class="grid-cell"></div>
+        <div class="grid-cell"></div>
+        <div class="grid-cell"></div>
+        <div class="grid-cell"></div>
       </div>
 
-      <div class="tile-container">
+      <div class="tile-container"></div>
 
-      </div>
+      <div class="duel-countdown" id="duel-countdown" hidden aria-hidden="true"></div>
     </div>
 
-    <p class="game-explanation">
-      <strong class="important">How to play:</strong> Use your <strong>arrow keys</strong> to move the tiles. When two tiles with the same number touch, they <strong>merge into one!</strong>
-    </p>
-    <hr>
-    <p>
-    <strong class="important">Note:</strong> This site is the official version of 2048. You can play it on your phone via <a href="http://git.io/2048">http://git.io/2048.</a> All other apps or sites are derivatives or fakes, and should be used with caution.
-    </p>
-    <hr>
-    <p>
-    Created by <a href="http://gabrielecirulli.com" target="_blank">Gabriele Cirulli.</a> Based on <a href="https://itunes.apple.com/us/app/1024!/id823499224" target="_blank">1024 by Veewo Studio</a> and conceptually similar to <a href="http://asherv.com/threes/" target="_blank">Threes by Asher Vollmer.</a>
-    </p>
-  </div>
+    <div class="duel-bar">
+      <button class="button button-secondary duel-entry" id="duel-entry" type="button">联机对战</button>
+      <div class="duel-hud" id="duel-hud" hidden>
+        <div class="duel-hud-item"><span class="duel-hud-label">房间</span><strong class="duel-hud-value" id="duel-hud-room">------</strong></div>
+        <div class="duel-hud-item"><span class="duel-hud-label">对手</span><strong class="duel-hud-value" id="duel-opponent-score">0</strong></div>
+        <div class="duel-hud-item"><span class="duel-hud-label">时间</span><strong class="duel-hud-value" id="duel-timer">--:--</strong></div>
+        <div class="duel-hud-item duel-energy-item">
+          <span class="duel-hud-label">能量</span>
+          <span class="energy-pips" id="duel-energy" aria-hidden="true"></span>
+        </div>
+        <div class="duel-hud-item duel-energy-item">
+          <span class="duel-hud-label">对手能量</span>
+          <span class="energy-pips" id="duel-opponent-energy" aria-hidden="true"></span>
+        </div>
+      </div>
+      <span class="duel-connection" id="duel-connection" role="status" aria-live="polite"></span>
+    </div>
+
+    <section class="opponent-preview" id="duel-opponent-preview" hidden aria-label="对手棋盘">
+      <div class="opponent-preview-head">
+        <span class="opponent-preview-label">对手棋盘</span>
+        <span class="opponent-preview-max">最大 <strong id="duel-opponent-max">0</strong></span>
+      </div>
+      <div class="opponent-board" id="duel-opponent-board"></div>
+      <span class="opponent-preview-empty" id="duel-opponent-empty" hidden>等待对手走棋…</span>
+    </section>
+
+    <div class="duel-skill-bar" id="duel-skill" hidden>
+      <button class="button button-secondary duel-skill-button" type="button" data-duel-action="skill">
+        <img class="icon" src="style/icons/bolt.svg" alt=""><span id="duel-skill-label">能量不足</span>
+      </button>
+      <span class="duel-skill-notice" id="duel-skill-notice" role="status" aria-live="polite"></span>
+    </div>
+
+    <footer class="game-footer">
+      <button class="button button-secondary autoplay-button" type="button" aria-pressed="false" aria-label="智能走 15 步" title="智能走 15 步"><img class="icon" src="style/icons/wand-sparkles.svg" alt=""><span class="autoplay-label">智能 15 步</span></button>
+      <span class="autoplay-status visually-hidden" role="status" aria-live="polite"></span>
+      <label class="motion-control"><span>动效</span><input class="motion-toggle" type="checkbox" role="switch" aria-label="动效" checked><span class="switch-track" aria-hidden="true"></span></label>
+    </footer>
+
+    <div class="duel-overlay" id="duel-overlay" hidden>
+      <div class="duel-card">
+        <section class="duel-screen" data-duel-screen="lobby">
+          <h2 class="duel-title">联机对战</h2>
+          <button class="button button-primary" type="button" data-duel-action="create">创建房间</button>
+          <form class="duel-join" id="duel-join">
+            <label class="visually-hidden" for="duel-code">房间码</label>
+            <input class="duel-input" id="duel-code" type="text" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="房间码">
+            <button class="button button-secondary" type="submit" data-duel-action="join">加入</button>
+          </form>
+          <button class="button button-secondary" type="button" data-duel-action="solo">返回单机</button>
+        </section>
+
+        <section class="duel-screen" data-duel-screen="waiting">
+          <h2 class="duel-title">等待对手</h2>
+          <div class="duel-code">
+            <span class="duel-code-label">房间码</span>
+            <strong class="duel-code-value" id="duel-room-code">------</strong>
+            <button class="button button-secondary" type="button" data-duel-action="copy">复制</button>
+          </div>
+          <p class="duel-hint" id="duel-hint">把房间码发给对手，等待对方加入</p>
+          <ul class="duel-players" id="duel-players"></ul>
+          <button class="button button-primary" type="button" data-duel-action="ready">准备</button>
+          <button class="button button-secondary" type="button" data-duel-action="leave">离开房间</button>
+        </section>
+
+        <section class="duel-screen" data-duel-screen="result">
+          <h2 class="duel-title" id="duel-result-title">对局结束</h2>
+          <p class="duel-hint" id="duel-result-detail"></p>
+          <p class="duel-result-score" id="duel-result-score"></p>
+          <div class="duel-rematch-bar">
+            <button class="button button-primary" id="duel-rematch" type="button" data-duel-action="rematch" aria-pressed="false">再来一局</button>
+            <span class="duel-rematch-hint" id="duel-rematch-hint"></span>
+          </div>
+          <button class="button button-secondary" type="button" data-duel-action="leave">返回大厅</button>
+        </section>
+
+        <p class="duel-status" id="duel-status" role="status" aria-live="polite"></p>
+      </div>
+    </div>
+  </main>
 
   <script src="js/bind_polyfill.js"></script>
   <script src="js/classlist_polyfill.js"></script>
@@ -92,8 +167,14 @@
   <script src="js/html_actuator.js"></script>
   <script src="js/grid.js"></script>
   <script src="js/tile.js"></script>
+  <script src="js/view_state.js"></script>
   <script src="js/local_storage_manager.js"></script>
+  <script src="js/game_logic.js"></script>
+  <script src="js/game_solver.js"></script>
   <script src="js/game_manager.js"></script>
+  <script src="js/websocket_client.js"></script>
+  <script src="js/multiplayer_manager.js"></script>
+  <script src="js/duel_controller.js"></script>
   <script src="js/application.js"></script>
 </body>
 </html>

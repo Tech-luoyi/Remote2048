@@ -1,549 +1,762 @@
-@import "helpers";
-@import "fonts/clear-sans.css";
+/* Classic warm 2048 palette. Generate main.css with npm run build:css.
+ * Tile motion uses separate layers: wrapper for sliding, inner for the
+ * contact pulse. HTMLActuator owns timing and cancellation for each move.
+ */
 
-$field-width: 500px;
-$grid-spacing: 15px;
-$grid-row-cells: 4;
-$tile-size: ($field-width - $grid-spacing * ($grid-row-cells + 1)) / $grid-row-cells;
-$tile-border-radius: 3px;
+:root {
+  color-scheme: light;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", Arial, sans-serif;
 
-$mobile-threshold: $field-width + 20px;
+  /* 纸面与文字 ------------------------------------------------------- */
+  --paper: #faf8ef;
+  --surface: #f9f6f2;
+  --surface-sunk: #f2ede4;
+  --ink: #776e65;
+  --tile-ink: #594d42;
+  --muted: #8a7e72;
+  --rule: #ddd3c8;
 
-$text-color: #776E65;
-$bright-text-color: #f9f6f2;
+  /* 主色（唯一强调色） ------------------------------------------------ */
+  --accent: #8f7a66;
+  --accent-hover: #796653;
+  --accent-ink: #f9f6f2;
+  --focus: #305e66;
 
-$tile-color: #eee4da;
-$tile-gold-color: #edc22e;
-$tile-gold-glow-color: lighten($tile-gold-color, 15%);
+  /* 棋盘 -------------------------------------------------------------- */
+  --board-bg: #bbada0;
+  --cell-bg: #ccc0b3;
+  --score-label: #f0e6dc;
+  --coral: #f65e3b;
+  --overlay: #faf8efed;
+  --clear: transparent;
 
-$game-container-margin-top: 40px;
-$game-container-background: #bbada0;
+  /* 数值色阶（原版配色，保持不变） ------------------------------------ */
+  --tile-2: #eee4da;
+  --tile-4: #ede0c8;
+  --tile-8: #f2b179;
+  --tile-16: #f59563;
+  --tile-32: #f67c5f;
+  --tile-64: #f65e3b;
+  --tile-128: #edcf72;
+  --tile-256: #edcc61;
+  --tile-512: #edc850;
+  --tile-1024: #edc53f;
+  --tile-2048: #edc22e;
+  --tile-super: #3c3a32;
 
-$transition-speed: 100ms;
+  /* 投影：统一用暖褐色染色，禁止纯黑投影落在纸面上 ------------------ */
+  --lift-1: 0 1px 2px rgba(89, 77, 66, 0.08);
+  --lift-2: 0 2px 6px rgba(89, 77, 66, 0.1), 0 1px 2px rgba(89, 77, 66, 0.06);
+  --lift-3: 0 18px 36px -18px rgba(89, 77, 66, 0.35),
+            0 4px 10px -4px rgba(89, 77, 66, 0.12);
+  --edge-top: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  --edge-bottom: inset 0 -1px 0 rgba(89, 77, 66, 0.06);
 
-html, body {
-  margin: 0;
-  padding: 0;
+  /* 圆角：一套刻度，按角色套用，不混用 ------------------------------- */
+  --radius-sm: 6px;    /* 格子、输入框 */
+  --radius-md: 10px;   /* 按钮、卡片 */
+  --radius-lg: 16px;   /* 棋盘、结算遮罩 */
 
-  background: #faf8ef;
-  color: $text-color;
-  font-family: "Clear Sans", "Helvetica Neue", Arial, sans-serif;
-  font-size: 18px;
+  /* 棋盘几何 ---------------------------------------------------------- */
+  --board: min(calc(100vw - 32px), 440px);
+  --gap: 12px;
+  --cell: calc((var(--board) - var(--gap) * 5) / 4);
+  --step: calc(var(--cell) + var(--gap));
+
+  /* 间距刻度 ---------------------------------------------------------- */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+
+  /* 动效 -------------------------------------------------------------- */
+  --ease: cubic-bezier(0.2, 0.75, 0.25, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
+
+*, *::before, *::after { box-sizing: border-box; }
+
+// 面板用 display:flex 布局，必须显式复位 hidden 属性，否则切屏失效。
+[hidden] { display: none !important; }
+
+html, body { overflow-x: clip; }
+
+html { -webkit-text-size-adjust: 100%; }
 
 body {
-  margin: 80px 0;
-}
-
-.heading {
-  @include clearfix;
-}
-
-h1.title {
-  font-size: 80px;
-  font-weight: bold;
   margin: 0;
-  display: block;
-  float: left;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: var(--space-xl) 0;
+  background:
+    radial-gradient(120% 70% at 50% -10%, #fffdf7 0%, rgba(255, 253, 247, 0) 62%),
+    var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  letter-spacing: 0;
+  -webkit-font-smoothing: antialiased;
 }
 
-@include keyframes(move-up) {
-  0% {
-    top: 25px;
-    opacity: 1;
-  }
+::selection { background: var(--tile-4); color: var(--ink); }
 
-  100% {
-    top: -50px;
-    opacity: 0;
-  }
+.app { width: var(--board); user-select: none; }
+
+/* ==========================================================================
+   顶栏
+   ========================================================================== */
+
+.masthead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-lg);
+  min-height: 84px;
 }
 
-.scores-container {
-  float: right;
-  text-align: right;
+.brand { display: flex; flex: 0 0 auto; flex-direction: column; gap: var(--space-xs); }
+.wordmark {
+  margin: 0;
+  font-size: 68px;
+  font-weight: 800;
+  line-height: 0.92;
+  letter-spacing: -0.035em;
 }
+.brand-name { padding-left: 3px; font-size: 12px; letter-spacing: 0.06em; color: var(--muted); }
 
-.score-container, .best-container {
-  $height: 25px;
-
+.scores {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  flex: 0 0 200px;
+  padding: var(--space-sm) 0;
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, #c2b4a6 0%, var(--board-bg) 100%);
+  box-shadow: var(--lift-2), var(--edge-top);
+  color: var(--accent-ink);
+}
+.score {
   position: relative;
-  display: inline-block;
-  background: $game-container-background;
-  padding: 15px 25px;
-  font-size: $height;
-  height: $height;
-  line-height: $height + 22px;
-  font-weight: bold;
-  border-radius: 3px;
-  color: white;
-  margin-top: 8px;
+  min-width: 0;
+  height: 46px;
+  padding: 0 var(--space-sm);
   text-align: center;
-
-  &:after {
-    position: absolute;
-    width: 100%;
-    top: 10px;
-    left: 0;
-    text-transform: uppercase;
-    font-size: 13px;
-    line-height: 13px;
-    text-align: center;
-    color: $tile-color;
-  }
-
-  .score-addition {
-    position: absolute;
-    right: 30px;
-    color: red;
-    font-size: $height;
-    line-height: $height;
-    font-weight: bold;
-    color: rgba($text-color, .9);
-    z-index: 100;
-    @include animation(move-up 600ms ease-in);
-    @include animation-fill-mode(both);
-  }
 }
-
-.score-container:after {
-  content: "Score";
+.score + .score::before {
+  content: "";
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 0;
+  width: 1px;
+  background: var(--score-label);
+  opacity: 0.7;
 }
-
-.best-container:after {
-  content: "Best";
+.score-label {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--score-label);
+  line-height: 15px;
 }
-
-p {
-  margin-top: 0;
-  margin-bottom: 10px;
-  line-height: 1.65;
+.score-value {
+  position: relative;
+  display: block;
+  font-size: 26px;
+  font-weight: 750;
+  line-height: 28px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
+.score-value[data-medium="true"] { font-size: 18px; }
+.score-value[data-long="true"] { font-size: 16px; }
+.score-value[data-wide="true"] { font-size: 12px; }
 
-a {
-  color: $text-color;
-  font-weight: bold;
-  text-decoration: underline;
-  cursor: pointer;
+.score-gain-container {
+  position: absolute;
+  top: calc(100% + 12px);
+  left: 0;
+  right: 0;
+  z-index: 5;
+  pointer-events: none;
 }
-
-strong {
-  &.important {
-    text-transform: uppercase;
-  }
-}
-
-hr {
-  border: none;
-  border-bottom: 1px solid lighten($text-color, 40%);
-  margin-top: 20px;
-  margin-bottom: 30px;
-}
-
-.container {
-  width: $field-width;
-  margin: 0 auto;
-}
-
-@include keyframes(fade-in) {
-  0% {
-    opacity: 0;
-  }
-
-  100% {
-    opacity: 1;
-  }
-}
-
-// Styles for buttons
-@mixin button {
+.score-gain {
   display: inline-block;
-  background: darken($game-container-background, 20%);
-  border-radius: 3px;
-  padding: 0 20px;
-  text-decoration: none;
-  color: $bright-text-color;
-  height: 40px;
-  line-height: 42px;
+  color: var(--tile-ink);
+  font-size: 18px;
+  font-weight: 750;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.score-gain[data-long="true"] { font-size: 13px; }
+.score-gain[data-wide="true"] { font-size: 10px; }
+
+/* ==========================================================================
+   工具栏
+   ========================================================================== */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-xl) 0 var(--space-lg);
 }
 
-// Game field mixin used to render CSS at different width
-@mixin game-field {
-  .game-container {
-    margin-top: $game-container-margin-top;
-    position: relative;
-    padding: $grid-spacing;
+/* ==========================================================================
+   按钮
+   ========================================================================== */
 
-    cursor: default;
-    -webkit-touch-callout: none;
-    -ms-touch-callout: none;
+.button {
+  appearance: none;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  height: 44px;
+  padding: 0 var(--space-lg);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  font: 600 13px/1 var(--font-sans);
+  letter-spacing: 0;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: var(--clear);
+  box-shadow: var(--lift-1);
+  transition: background-color 140ms var(--ease), box-shadow 140ms var(--ease),
+    transform 100ms var(--ease);
+}
+.icon { display: block; width: 18px; height: 18px; flex-shrink: 0; }
+.button-primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); box-shadow: var(--lift-2); }
+.button .icon { opacity: 0.7; }
+.button-primary .icon { filter: invert(1); opacity: 1; }
+.button:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.button:active { transform: translateY(1px) scale(0.985); box-shadow: var(--lift-1); }
+.button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
 
-    -webkit-user-select: none;
-    -moz-user-select: none;
-    -ms-user-select: none;
-
-    -ms-touch-action: none;
-    touch-action: none;
-
-    background: $game-container-background;
-    border-radius: $tile-border-radius * 2;
-    width: $field-width;
-    height: $field-width;
-    -webkit-box-sizing: border-box;
-    -moz-box-sizing: border-box;
-    box-sizing: border-box;
-
-    .game-message {
-      display: none;
-
-      position: absolute;
-      top: 0;
-      right: 0;
-      bottom: 0;
-      left: 0;
-      background: rgba($tile-color, .5);
-      z-index: 100;
-
-      text-align: center;
-
-      p {
-        font-size: 60px;
-        font-weight: bold;
-        height: 60px;
-        line-height: 60px;
-        margin-top: 222px;
-        // height: $field-width;
-        // line-height: $field-width;
-      }
-
-      .lower {
-        display: block;
-        margin-top: 59px;
-      }
-
-      a {
-        @include button;
-        margin-left: 9px;
-        // margin-top: 59px;
-
-	&.keep-playing-button {
-	  display: none;
-	}
-      }
-
-      @include animation(fade-in 800ms ease $transition-speed * 12);
-      @include animation-fill-mode(both);
-
-      &.game-won {
-        background: rgba($tile-gold-color, .5);
-        color: $bright-text-color;
-
-	a.keep-playing-button {
-	  display: inline-block;
-	}
-      }
-
-      &.game-won, &.game-over {
-        display: block;
-      }
-    }
-  }
-
-  .grid-container {
-    position: absolute;
-    z-index: 1;
-  }
-
-  .grid-row {
-    margin-bottom: $grid-spacing;
-
-    &:last-child {
-      margin-bottom: 0;
-    }
-
-    &:after {
-      content: "";
-      display: block;
-      clear: both;
-    }
-  }
-
-  .grid-cell {
-    width: $tile-size;
-    height: $tile-size;
-    margin-right: $grid-spacing;
-    float: left;
-
-    border-radius: $tile-border-radius;
-
-    background: rgba($tile-color, .35);
-
-    &:last-child {
-      margin-right: 0;
-    }
-  }
-
-  .tile-container {
-    position: absolute;
-    z-index: 2;
-  }
-
-  .tile {
-    &, .tile-inner {
-      width: ceil($tile-size);
-      height: ceil($tile-size);
-      line-height: ceil($tile-size);
-    }
-
-    // Build position classes
-    @for $x from 1 through $grid-row-cells {
-      @for $y from 1 through $grid-row-cells {
-        &.tile-position-#{$x}-#{$y} {
-          $xPos: floor(($tile-size + $grid-spacing) * ($x - 1));
-          $yPos: floor(($tile-size + $grid-spacing) * ($y - 1));
-          @include transform(translate($xPos, $yPos));
-        }
-      }
-    }
-  }
+@media (hover: hover) {
+  .button:hover { background: var(--tile-2); color: var(--ink); box-shadow: var(--lift-2); transform: translateY(-1px); }
+  .button-primary:hover { background: var(--accent-hover); color: var(--accent-ink); box-shadow: var(--lift-3); transform: translateY(-1px); }
 }
 
-// End of game-field mixin
-@include game-field;
+/* ==========================================================================
+   棋盘
+   ========================================================================== */
+
+.game-container {
+  position: relative;
+  width: var(--board);
+  aspect-ratio: 1;
+  padding: var(--gap);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, #c3b5a8 0%, var(--board-bg) 100%);
+  box-shadow: var(--lift-3), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  color: var(--ink);
+  touch-action: none;
+  -webkit-touch-callout: none;
+  isolation: isolate;
+  animation: board-enter 460ms var(--ease) both;
+}
+
+@keyframes board-enter {
+  from { opacity: 0; transform: translateY(10px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.grid-container, .tile-container { position: absolute; inset: var(--gap); }
+.grid-container {
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(4, var(--cell));
+  grid-template-rows: repeat(4, var(--cell));
+  gap: var(--gap);
+}
+.grid-cell {
+  border-radius: var(--radius-sm);
+  background: var(--cell-bg);
+  box-shadow: inset 0 1px 2px rgba(89, 77, 66, 0.12);
+  color: var(--ink);
+}
+.tile-container { z-index: 2; }
+
+/* ==========================================================================
+   方块
+   ========================================================================== */
 
 .tile {
-  position: absolute; // Makes transforms relative to the top-left corner
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--cell);
+  height: var(--cell);
+}
+.tile .tile-inner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-sm);
+  background: var(--tile-bg, var(--surface));
+  color: var(--tile-fg, var(--tile-ink));
+  font-size: 44px;
+  font-weight: 750;
+  line-height: 1;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 2px 3px rgba(89, 77, 66, 0.1);
+}
+@each $value in 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048 {
+  .tile-#{$value} { --tile-bg: var(--tile-#{$value}); }
+}
+.tile-128 .tile-inner, .tile-256 .tile-inner, .tile-512 .tile-inner { font-size: 36px; }
+.tile-1024 .tile-inner, .tile-2048 .tile-inner { font-size: 30px; }
+.tile.tile-super { --tile-bg: var(--tile-super); --tile-fg: var(--accent-ink); }
+.tile.tile-super .tile-inner { font-size: 20px; }
 
-  .tile-inner {
-    border-radius: $tile-border-radius;
+// Interference stays legible without replaying an effect on every move.
+.tile.tile-interference .tile-inner {
+  box-shadow: inset 0 0 0 2px var(--coral), 0 2px 3px rgba(89, 77, 66, 0.1);
+}
 
-    background: $tile-color;
-    text-align: center;
-    font-weight: bold;
-    z-index: 10;
-
-    font-size: 55px;
-  }
-
-  // Movement transition
-  @include transition($transition-speed ease-in-out);
-  -webkit-transition-property: -webkit-transform;
-  -moz-transition-property: -moz-transform;
-  transition-property: transform;
-
-  $base: 2;
-  $exponent: 1;
-  $limit: 11;
-
-  // Colors for all 11 states, false = no special color
-  $special-colors: false false, // 2
-                   false false, // 4
-                   #f78e48 true, // 8
-                   #fc5e2e true, // 16
-                   #ff3333 true, // 32
-                   #ff0000 true, // 64
-                   false true, // 128
-                   false true, // 256
-                   false true, // 512
-                   false true, // 1024
-                   false true; // 2048
-
-  // Build tile colors
-  @while $exponent <= $limit {
-    $power: pow($base, $exponent);
-
-    &.tile-#{$power} .tile-inner {
-      // Calculate base background color
-      $gold-percent: ($exponent - 1) / ($limit - 1) * 100;
-      $mixed-background: mix($tile-gold-color, $tile-color, $gold-percent);
-
-      $nth-color: nth($special-colors, $exponent);
-
-      $special-background: nth($nth-color, 1);
-      $bright-color: nth($nth-color, 2);
-
-      @if $special-background {
-        $mixed-background: mix($special-background, $mixed-background, 55%);
-      }
-
-      @if $bright-color {
-        color: $bright-text-color;
-      }
-
-      // Set background
-      background: $mixed-background;
-
-      // Add glow
-      $glow-opacity: max($exponent - 4, 0) / ($limit - 4);
-
-      @if not $special-background {
-        box-shadow: 0 0 30px 10px rgba($tile-gold-glow-color, $glow-opacity / 1.8),
-                    inset 0 0 0 1px rgba(white, $glow-opacity / 3);
-      }
-
-      // Adjust font size for bigger numbers
-      @if $power >= 100 and $power < 1000 {
-        font-size: 45px;
-
-        // Media queries placed here to avoid carrying over the rest of the logic
-        @include smaller($mobile-threshold) {
-          font-size: 25px;
-        }
-      } @else if $power >= 1000 {
-        font-size: 35px;
-
-        @include smaller($mobile-threshold) {
-          font-size: 15px;
-        }
-      }
-    }
-
-    $exponent: $exponent + 1;
-  }
-
-  // Super tiles (above 2048)
-  &.tile-super .tile-inner {
-    color: $bright-text-color;
-    background: mix(#333, $tile-gold-color, 95%);
-
-    font-size: 30px;
-
-    @include smaller($mobile-threshold) {
-      font-size: 10px;
-    }
+@for $x from 1 through 4 {
+  @for $y from 1 through 4 {
+    .tile-position-#{$x}-#{$y} { transform: translate(calc(var(--step) * #{$x - 1}), calc(var(--step) * #{$y - 1})); }
   }
 }
 
-@include keyframes(appear) {
-  0% {
-    opacity: 0;
-    @include transform(scale(0));
-  }
+/* CSS fallback for the same keyframes used by Web Animations. */
+.tile-merge-source { z-index: 2; }
+.tile-merged { z-index: 3; }
 
-  100% {
-    opacity: 1;
-    @include transform(scale(1));
-  }
+@keyframes motion-slide {
+  from { transform: var(--motion-transform-0); opacity: var(--motion-opacity-0, 1); }
+  to { transform: var(--motion-transform-1); opacity: var(--motion-opacity-1, 1); }
+}
+@keyframes motion-pulse {
+  from { transform: var(--motion-transform-0); }
+  38% { transform: var(--motion-transform-1); }
+  to { transform: var(--motion-transform-2); }
+}
+@keyframes motion-gain {
+  0% { transform: var(--motion-transform-0); opacity: var(--motion-opacity-0); }
+  12% { transform: var(--motion-transform-1); opacity: var(--motion-opacity-1); }
+  62% { transform: var(--motion-transform-2); opacity: var(--motion-opacity-2); }
+  100% { transform: var(--motion-transform-3); opacity: var(--motion-opacity-3); }
 }
 
-.tile-new .tile-inner {
-  @include animation(appear 200ms ease $transition-speed);
-  @include animation-fill-mode(backwards);
-}
+/* ==========================================================================
+   结算 / 胜利遮罩
+   ========================================================================== */
 
-@include keyframes(pop) {
-  0% {
-    @include transform(scale(0));
-  }
-
-  50% {
-    @include transform(scale(1.2));
-  }
-
-  100% {
-    @include transform(scale(1));
-  }
-}
-
-.tile-merged .tile-inner {
-  z-index: 20;
-  @include animation(pop 200ms ease $transition-speed);
-  @include animation-fill-mode(backwards);
-}
-
-.above-game {
-  @include clearfix;
-}
-
-.game-intro {
-  float: left;
-  line-height: 42px;
-  margin-bottom: 0;
-}
-
-.restart-button {
-  @include button;
-  display: block;
+.game-message {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
+  padding: var(--space-xl);
+  border-radius: inherit;
+  background: var(--overlay);
+  -webkit-backdrop-filter: blur(6px) saturate(1.1);
+  backdrop-filter: blur(6px) saturate(1.1);
+  color: var(--ink);
   text-align: center;
-  float: right;
+}
+.game-message.game-won, .game-message.game-over { display: flex; animation: message-in 260ms var(--ease) 260ms both; }
+// 内容逐级入场：图标 -> 标题 -> 分数 -> 按钮
+.game-message.game-won > *, .game-message.game-over > * {
+  animation: message-item 420ms var(--ease-spring) both;
+}
+.game-message.game-won > *:nth-child(2), .game-message.game-over > *:nth-child(2) { animation-delay: 80ms; }
+.game-message.game-won > *:nth-child(3), .game-message.game-over > *:nth-child(3) { animation-delay: 150ms; }
+.game-message.game-won > *:nth-child(4), .game-message.game-over > *:nth-child(4) { animation-delay: 220ms; }
+
+.result-icon {
+  width: 44px;
+  height: 44px;
+  margin-bottom: var(--space-xs);
+  filter: drop-shadow(0 3px 6px rgba(89, 77, 66, 0.25));
+}
+.message-text {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 750;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.result-score { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.lower { display: flex; justify-content: center; flex-wrap: wrap; gap: var(--space-sm); margin-top: var(--space-sm); }
+.game-message .keep-playing-button { display: none; }
+.game-message.game-won .keep-playing-button { display: inline-flex; }
+
+@keyframes message-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes message-item {
+  from { opacity: 0; transform: translateY(14px) scale(0.9); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-.game-explanation {
-  margin-top: 50px;
+// 胜利时整块遮罩透出暖光，呼应目标方块的金色
+.game-message.game-won {
+  background:
+    radial-gradient(80% 60% at 50% 42%, rgba(237, 194, 46, 0.34) 0%, rgba(237, 194, 46, 0) 70%),
+    var(--overlay);
+}
+.game-message.game-won .message-text { color: #8a6a1f; }
+
+/* ==========================================================================
+   页脚
+   ========================================================================== */
+
+.game-footer { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); padding-top: var(--space-md); }
+.autoplay-button { width: 132px; font-variant-numeric: tabular-nums; }
+.autoplay-button[aria-pressed="true"] { background: var(--tile-4); border-color: var(--board-bg); }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+
+.milestone {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 0 var(--space-md);
+  height: 32px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+  box-shadow: var(--lift-1);
+}
+.max-tile { color: var(--ink); font-size: 15px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.motion-control { position: relative; display: flex; align-items: center; gap: var(--space-sm); min-height: 44px; color: var(--muted); font-size: 12px; cursor: pointer; }
+.motion-toggle { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.switch-track { width: 28px; height: 16px; border: 1px solid var(--muted); border-radius: 10px; background: var(--paper); transition: background-color 140ms var(--ease); pointer-events: none; }
+.switch-track::before { content: ""; display: block; width: 10px; height: 10px; margin: 2px; border-radius: 50%; background: var(--muted); transition: transform 180ms var(--ease-spring); }
+.motion-toggle:checked + .switch-track { background: var(--accent); border-color: var(--accent); }
+.motion-toggle:checked + .switch-track::before { transform: translateX(12px); background: var(--accent-ink); }
+.motion-toggle:focus-visible + .switch-track { outline: 2px solid var(--focus); outline-offset: 3px; }
+.motion-toggle:disabled { cursor: not-allowed; }
+.motion-toggle:disabled + .switch-track { opacity: 0.5; }
+
+/* ==========================================================================
+   联机对战
+   ========================================================================== */
+
+.duel-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm) var(--space-md);
+  padding-top: var(--space-md);
+  min-height: 44px;
+}
+.duel-entry { flex: 1 1 auto; }
+.duel-hud {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, auto));
+  justify-content: space-between;
+  align-items: start;
+  gap: var(--space-lg);
+  flex: 1 1 auto;
+}
+.duel-hud-item { display: flex; flex-direction: column; gap: 2px; }
+.duel-hud-label { font-size: 10px; letter-spacing: 0.12em; color: var(--muted); line-height: 14px; }
+.duel-hud-value { font-size: 18px; font-weight: 700; line-height: 22px; font-variant-numeric: tabular-nums; }
+.duel-connection { flex: 1 1 100%; font-size: 12px; line-height: 16px; color: var(--muted); text-align: right; }
+.duel-connection[data-tone="error"] { color: var(--coral); }
+
+// 能量用格子表示，最多 ENERGY_MAX 个；不显示数字以免与分数混淆。
+.duel-energy-item { justify-content: center; }
+.energy-pips { display: flex; gap: 4px; height: 18px; align-items: center; }
+.energy-pip {
+  width: 13px;
+  height: 13px;
+  border: 1.5px solid var(--accent);
+  border-radius: 4px;
+  background: transparent;
+  transition: background-color 180ms var(--ease), transform 260ms var(--ease-spring);
+}
+.energy-pip[data-filled="true"] {
+  background: var(--accent);
+  transform: scale(1.08);
+  box-shadow: 0 0 0 3px rgba(143, 122, 102, 0.16);
 }
 
-@include smaller($mobile-threshold) {
-  // Redefine variables for smaller screens
-  $field-width: 280px;
-  $grid-spacing: 10px;
-  $grid-row-cells: 4;
-  $tile-size: ($field-width - $grid-spacing * ($grid-row-cells + 1)) / $grid-row-cells;
-  $tile-border-radius: 3px;
-  $game-container-margin-top: 17px;
-
-  html, body {
-    font-size: 15px;
-  }
-
-  body {
-    margin: 20px 0;
-    padding: 0 20px;
-  }
-
-  h1.title {
-    font-size: 27px;
-    margin-top: 15px;
-  }
-
-  .container {
-    width: $field-width;
-    margin: 0 auto;
-  }
-
-  .score-container, .best-container {
-    margin-top: 0;
-    padding: 15px 10px;
-    min-width: 40px;
-  }
-
-  .heading {
-    margin-bottom: 10px;
-  }
-
-  // Show intro and restart button side by side
-  .game-intro {
-    width: 55%;
-    display: block;
-    box-sizing: border-box;
-    line-height: 1.65;
-  }
-
-  .restart-button {
-    width: 42%;
-    padding: 0;
-    display: block;
-    box-sizing: border-box;
-    margin-top: 2px;
-  }
-
-  // Render the game field at the right width
-  @include game-field;
-
-  // Rest of the font-size adjustments in the tile class
-  .tile .tile-inner {
-    font-size: 35px;
-  }
-
-  .game-message {
-    p {
-      font-size: 30px !important;
-      height: 30px !important;
-      line-height: 30px !important;
-      margin-top: 90px !important;
-    }
-
-    .lower {
-      margin-top: 30px !important;
-    }
-  }
+.duel-skill-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm) var(--space-md);
+  padding-top: var(--space-sm);
 }
+.duel-skill-button { min-width: 132px; }
+.duel-skill-button[aria-disabled="true"] { opacity: 0.55; cursor: not-allowed; }
+.duel-skill-notice { flex: 1 1 auto; font-size: 12px; line-height: 16px; color: var(--muted); }
+.duel-skill-notice[data-tone="alert"] { color: var(--coral); font-weight: 600; animation: notice-shake 520ms var(--ease); }
+@keyframes notice-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-5px); }
+  45% { transform: translateX(4px); }
+  70% { transform: translateX(-2px); }
+}
+
+/* ---------------- 对手棋盘预览（只读快照） ---------------- */
+// 复用主棋盘的 tile 配色变量，但尺寸独立。预览必须明显小于主棋盘：
+// 它的作用是让玩家知道对手在做什么，不是替代对手棋盘。固定宽度而不是
+// 撑满，避免在手机上把页面从 690px 撑到 1280px。
+.opponent-preview {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding-top: var(--space-md);
+  animation: preview-enter 460ms var(--ease) both;
+}
+.opponent-preview-head { display: flex; flex-direction: column; gap: 2px; flex: 0 0 auto; }
+.opponent-preview-label { font-size: 10px; letter-spacing: 0.14em; color: var(--muted); }
+.opponent-preview-max { font-size: 11px; color: var(--muted); }
+.opponent-preview-max strong { color: var(--ink); font-weight: 750; font-variant-numeric: tabular-nums; }
+.opponent-preview-empty { font-size: 12px; line-height: 16px; color: var(--muted); }
+
+.opponent-board {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 3px;
+  width: 116px;
+  flex: 0 0 auto;
+  // 靠右对齐：左边是文字标签，右边是棋盘，这一行才是有意排布的，
+  // 否则右侧留白看起来像没排完。
+  margin-left: auto;
+  padding: 4px;
+  border-radius: var(--radius-md);
+  background: var(--board-bg);
+  box-shadow: var(--lift-1), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+.opponent-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  border-radius: 2px;
+  background: var(--cell-bg);
+  box-shadow: inset 0 1px 2px rgba(89, 77, 66, 0.12);
+  font-size: 9px;
+  font-weight: 750;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: transparent;
+  overflow: hidden;
+  transition: background-color 180ms var(--ease), color 180ms var(--ease);
+}
+.opponent-cell[data-value="2"] { background: var(--tile-2); color: var(--tile-ink); }
+.opponent-cell[data-value="4"] { background: var(--tile-4); color: var(--tile-ink); }
+.opponent-cell[data-value="8"] { background: var(--tile-8); }
+.opponent-cell[data-value="16"] { background: var(--tile-16); }
+.opponent-cell[data-value="32"] { background: var(--tile-32); }
+.opponent-cell[data-value="64"] { background: var(--tile-64); }
+.opponent-cell[data-value="128"] { background: var(--tile-128); }
+.opponent-cell[data-value="256"] { background: var(--tile-256); }
+.opponent-cell[data-value="512"] { background: var(--tile-512); }
+.opponent-cell[data-value="1024"] { background: var(--tile-1024); }
+.opponent-cell[data-value="2048"] { background: var(--tile-2048); }
+.opponent-cell[data-value="4"][data-interference="true"] {
+  box-shadow: inset 0 0 0 2px var(--coral), 0 0 0 2px rgba(246, 94, 59, 0.28);
+  animation: preview-interference 900ms var(--ease);
+}
+.opponent-cell:not([data-value="0"]) { color: var(--accent-ink); }
+.opponent-cell[data-value="2"], .opponent-cell[data-value="4"] { color: var(--tile-ink); }
+.opponent-cell[data-interference="true"] { color: var(--coral); }
+
+@keyframes preview-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes preview-interference {
+  0%, 100% { transform: scale(1); }
+  20% { transform: scale(1.25); }
+  50% { transform: scale(0.95); }
+  75% { transform: scale(1.08); }
+}
+
+.duel-rematch-bar { display: flex; flex-direction: column; align-items: center; gap: var(--space-xs); }
+.duel-rematch-hint { min-height: 16px; font-size: 12px; line-height: 16px; color: var(--muted); }
+
+.duel-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-lg);
+  background: #faf8efd9;
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  animation: fade-in 200ms var(--ease) both;
+}
+.duel-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  width: 100%;
+  max-width: 360px;
+  padding: var(--space-xl);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--lift-3);
+  color: var(--ink);
+  animation: card-enter 320ms var(--ease-spring) both;
+}
+.duel-screen { display: flex; flex-direction: column; gap: var(--space-md); animation: message-item 320ms var(--ease) both; }
+.duel-title { margin: 0; font-size: 22px; font-weight: 750; line-height: 1.3; letter-spacing: -0.02em; text-align: center; }
+.duel-hint { margin: 0; font-size: 13px; line-height: 18px; color: var(--muted); text-align: center; }
+.duel-join { display: flex; gap: var(--space-sm); }
+.duel-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 var(--space-md);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  text-align: center;
+  text-transform: uppercase;
+  box-shadow: inset 0 1px 2px rgba(89, 77, 66, 0.08);
+}
+.duel-input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.duel-code {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  box-shadow: inset 0 1px 2px rgba(89, 77, 66, 0.08);
+}
+.duel-code-label { font-size: 12px; color: var(--muted); }
+.duel-code-value { flex: 1 1 auto; font-size: 26px; font-weight: 750; letter-spacing: 6px; font-variant-numeric: tabular-nums; }
+.duel-players { display: flex; flex-direction: column; gap: var(--space-xs); margin: 0; padding: 0; list-style: none; }
+.duel-player { font-size: 13px; line-height: 18px; color: var(--muted); }
+.duel-result-score { margin: 0; font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; text-align: center; }
+.duel-status { min-height: 16px; margin: 0; font-size: 12px; line-height: 16px; color: var(--muted); text-align: center; }
+.duel-status[data-tone="error"] { color: var(--coral); }
+
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes card-enter {
+  from { opacity: 0; transform: translateY(18px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.duel-countdown {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink);
+  font-size: 72px;
+  font-weight: 800;
+  line-height: 1;
+  text-shadow: 0 4px 14px rgba(89, 77, 66, 0.3);
+  pointer-events: none;
+  animation: countdown-pop 620ms var(--ease-spring) both;
+}
+@keyframes countdown-pop {
+  0% { opacity: 0; transform: scale(1.5); }
+  40% { opacity: 1; transform: scale(1); }
+  100% { opacity: 1; transform: scale(0.94); }
+}
+
+.duel-mode {
+  .autoplay-button, .autoplay-status, .restart-button { display: none; }
+}
+
+/* ==========================================================================
+   响应式
+   ========================================================================== */
+
+@media (max-width: 480px) {
+  .masthead { min-height: 74px; gap: var(--space-md); }
+  .wordmark { font-size: 58px; }
+  .scores { flex-basis: 184px; }
+  .duel-hud { grid-template-columns: repeat(3, minmax(0, auto)); row-gap: var(--space-sm); }
+}
+
+@media (max-width: 380px) {
+  :root { --gap: 8px; }
+  body { padding: var(--space-lg) 0; }
+  .masthead { min-height: 68px; gap: var(--space-sm); }
+  .wordmark { font-size: 50px; }
+  .scores { flex-basis: 164px; padding: var(--space-xs) 0; }
+  .score { height: 42px; }
+  .score-value { font-size: 24px; }
+  .score-value[data-medium="true"] { font-size: 16px; }
+  .score-value[data-long="true"] { font-size: 13px; }
+  .score-value[data-wide="true"] { font-size: 10px; }
+  .toolbar { padding: var(--space-lg) 0 var(--space-md); }
+  .tile .tile-inner { font-size: 32px; }
+  .tile-128 .tile-inner, .tile-256 .tile-inner, .tile-512 .tile-inner { font-size: 26px; }
+  .tile-1024 .tile-inner, .tile-2048 .tile-inner { font-size: 22px; }
+  .tile.tile-super .tile-inner { font-size: 16px; }
+  .message-text { font-size: 26px; }
+  .game-message { padding: var(--space-lg); }
+  .lower .button { padding: 0 var(--space-md); }
+  .result-icon { width: 38px; height: 38px; }
+  .duel-hud { grid-template-columns: repeat(2, minmax(0, auto)); }
+}
+
+@media (max-width: 350px) {
+  .wordmark { font-size: 44px; }
+  .scores { flex-basis: 160px; }
+  .score-value { font-size: 22px; }
+}
+
+/* ==========================================================================
+   减少动态效果
+   动效开关和系统偏好共用同一套关闭逻辑；新增动画必须在这里登记，
+   否则用户关掉动效后仍会看到残留动画。
+   ========================================================================== */
+
+@mixin reduced-motion {
+  .tile, .button, .switch-track, .switch-track::before,
+  .energy-pip, .opponent-cell { transition: none; }
+
+  .tile, .tile-inner, .score-value, .score-gain,
+  .milestone, .game-container,
+  .game-message.game-won, .game-message.game-over,
+  .game-message.game-won > *, .game-message.game-over > *,
+  .duel-overlay, .duel-card, .duel-screen, .duel-countdown,
+  .opponent-preview, .opponent-cell[data-interference="true"] {
+    animation: none !important;
+  }
+
+  .tile-merged .tile-inner { visibility: visible !important; }
+  .tile-merge-source { display: none; }
+  .score-gain-container { display: none; }
+
+  .button:hover, .button:active { transform: none; }
+  .energy-pip[data-filled="true"] { transform: none; }
+}
+.motion-off { @include reduced-motion; }
+@media (prefers-reduced-motion: reduce) { @include reduced-motion; }

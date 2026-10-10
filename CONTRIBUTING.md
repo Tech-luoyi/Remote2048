@@ -1,33 +1,40 @@
-# Contributing
-Changes and improvements are more than welcome! Feel free to fork and open a pull request.
+# 贡献指南
 
-Please follow the house rules to have a bigger chance of your contribution being merged.
+欢迎提交改进和修复。请先阅读下面的约定，再创建分支和拉取请求。
 
-## House rules
+## 提交修改
 
-### How to make changes
- - To make changes, create a new branch based on `master` (do not create one from `gh-pages` unless strictly necessary) and make them there, then create a Pull Request to master.  
- `gh-pages` is different from master in that it contains sharing features, analytics and other things that have no direct bearing with the game. `master` is the "pure" version of the game.
- - If you want to modify the CSS, please edit the SCSS files present in `style/`: `main.scss` and others. Don't edit the `main.css`, because it's supposed to be generated.  
- In order to compile your SCSS modifications, you need to use the `sass` gem (install it by running `gem install sass` once Ruby is installed).  
- To run SASS, simply use the following command:  
- `sass --unix-newlines --watch style/main.scss`  
- SASS will automatically recompile your css when changed.
- - `Rakefile` contains some tasks that help during development. Feel free to add useful tasks if needed.
- - Please use 2-space indentation when editing the JavaScript. A `.jshintrc` file is present, which will help your code to follow the guidelines if you install and run `jshint`.
- - Please test your modification thoroughly before submitting your Pull Request.
+- 从 `master` 创建新分支。除非确有必要，不要从 `gh-pages` 创建分支，再向 `master` 提交拉取请求。
+- `gh-pages` 包含分享功能和统计代码；`master` 保持游戏的纯净版本。
+- `style/main.scss` 是页面样式的唯一源文件，`style/main.css` 由 Dart Sass 生成。修改源文件后须一同提交生成的 CSS，不要手动编辑 CSS。
+- 在 Node.js 18 或更高版本环境运行 `npm ci`，再编译或监听样式：
 
-### Changes that might not be accepted
-We have to be conservative with the core game. This means that some modifications won't be merged, or will have to be evaluated carefully before being merged:
+  ```bash
+  npm run build:css
+  npm run watch:css
+  ```
 
- - Undo/redo features
- - Save/reload features
- - Changes to how the tiles look or their contents
- - Changes to the layout
- - Changes to the grid size
+- `npm run check:css` 会重新编译到内存并核对已提交 CSS，防止样式源文件与页面脱节；不再需要 Ruby 或全局 Sass。
+- JavaScript 使用 2 个空格缩进。仓库中的 `.jshintrc` 可用于配置 JSHint。
+- 提交拉取请求前运行全部检查，覆盖游戏逻辑、房间与对战协议、预测回滚、渲染适配及样式一致性：
 
-### Changes that are welcome
- - Bug fixes
- - Compatibility improvements
- - "Under the hood" enhancements
- - Small changes that don't have an impact on the core gameplay
+  ```bash
+  npm test
+  ```
+
+## 谨慎修改的内容
+
+核心玩法需要保持稳定，下面的修改通常不会直接接受，或需要单独评估：
+
+- 撤销和重做；
+- 保存和重新加载机制；
+- 方块的外观或内容；
+- 页面布局；
+- 棋盘尺寸。
+
+## 欢迎提交的内容
+
+- 缺陷修复；
+- 兼容性改进；
+- 不改变核心玩法的底层优化；
+- 小范围、可验证的体验改进。

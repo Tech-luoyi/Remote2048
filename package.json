@@ -1,0 +1,30 @@
+{
+  "name": "2048-remote-duel",
+  "version": "0.1.0",
+  "private": true,
+  "description": "2048 远程双人对战服务端骨架",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "build:css": "sass --no-source-map --style=expanded style/main.scss style/main.css",
+    "watch:css": "npm run build:css -- --watch",
+    "check:css": "node test/style.test.js",
+    "test:protocol": "node test/protocol.test.js",
+    "test:ui": "node test/ui.test.js",
+    "test:duel": "node test/duel.test.js",
+    "test:match": "node test/match.test.js",
+    "test:solver": "node test/solver.test.js && node test/ziap.test.js",
+    "test": "node test/logic.test.js && node test/protocol.test.js && npm run test:match && npm run test:duel && npm run test:solver && npm run check:css && npm run test:ui",
+    "bench:solver": "node test/solver.bench.js",
+    "gen:solver-decisions": "node test/gen_solver_decisions.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "sass": "1.97.3"
+  }
+}
